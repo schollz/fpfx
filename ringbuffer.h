@@ -36,6 +36,9 @@ void Ringbuffer_free(Ringbuffer* fb) {
 int32_t Ringbuffer_get(const Ringbuffer* fb) { return fb->samples[fb->pos]; }
 
 void Ringbuffer_add(Ringbuffer* fb, int32_t sample) {
+  while (fb->pos > fb->nr_samples) {
+    fb->pos -= fb->nr_samples;
+  }
   fb->samples[fb->pos] = sample;
 
   /* If we reach the end of the buffer, wrap around */

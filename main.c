@@ -16,7 +16,7 @@ const int block_size = 8192;
 
 #define DO_REVERB 0
 #define DO_BITCRUSH 0
-#define DO_DELAY 1
+#define DO_DELAY 0
 
 int msleep(long msec) {
   struct timespec ts;
