@@ -10,6 +10,8 @@
 #include "bitcrush.h"
 #include "delay.h"
 #include "fixedpoint.h"
+#include "flanger.h"
+#include "freeverb.h"
 #include "reverb.h"
 
 const int block_size = 8192;
@@ -17,6 +19,8 @@ const int block_size = 8192;
 #define DO_REVERB 0
 #define DO_BITCRUSH 0
 #define DO_DELAY 0
+#define DO_FLANGER 0
+#define DO_FREEVERB 1
 
 int msleep(long msec) {
   struct timespec ts;
@@ -37,6 +41,10 @@ int msleep(long msec) {
   return res;
 }
 
+#if DO_FREEVERB == 1
+FV_Reverb fv_reverb;
+#endif
+
 int main(int argc, char *argv[]) {
   // Initialize random number generator
   srand(time(NULL));
@@ -50,8 +58,16 @@ int main(int argc, char *argv[]) {
 #if DO_BITCRUSH == 1
   Bitcrush *bitcrush = Bitcrush_malloc();
 #endif
+#if DO_FLANGER == 1
+  Flanger *flanger = Flanger_malloc(0.2);
+#endif
+#if DO_FREEVERB == 1
+  FV_Reverb_init(&fv_reverb);
+#endif
 
+  int iterator = 0;
   while (true) {
+    iterator++;
     int16_t buf[block_size];
     ssize_t in = read(STDIN_FILENO, buf, sizeof(buf));
     if (in == -1) {
@@ -77,6 +93,12 @@ int main(int argc, char *argv[]) {
 #endif
 #if DO_BITCRUSH == 1
     Bitcrush_process(bitcrush, buf_fp, block_size);
+#endif
+#if DO_FLANGER == 1
+    Flanger_process(flanger, buf_fp, block_size);
+#endif
+#if DO_FREEVERB == 1
+    FV_Reverb_process(&fv_reverb, buf_fp, block_size);
 #endif
 
     for (int i = 0; i < block_size; i++) {

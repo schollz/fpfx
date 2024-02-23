@@ -7,7 +7,7 @@ listen: build
 	cat 1.raw | ./main | aplay -t raw -c 1 -f s16 -r 44100
 
 leaks: build
-	cat 1.raw | valgrind --track-origins=yes --tool=memcheck ./main > /dev/null
+	valgrind --track-origins=yes --tool=memcheck ./main > /dev/null
 
 prereqs:
 	sudo apt-get install libsdl2-dev
