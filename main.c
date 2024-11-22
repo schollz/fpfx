@@ -13,6 +13,7 @@
 #include "flanger.h"
 #include "freeverb.h"
 #include "reverb.h"
+#include "tapedelay.h"
 
 const int block_size = 8192;
 
@@ -20,7 +21,8 @@ const int block_size = 8192;
 #define DO_BITCRUSH 0
 #define DO_DELAY 0
 #define DO_FLANGER 0
-#define DO_FREEVERB 1
+#define DO_FREEVERB 0
+#define DO_TAPEDELAY 1
 
 int msleep(long msec) {
   struct timespec ts;
@@ -64,6 +66,9 @@ int main(int argc, char *argv[]) {
 #if DO_FREEVERB == 1
   FV_Reverb_init(&fv_reverb);
 #endif
+#if DO_TAPEDELAY == 1
+  TapeDelay *tapedelay = TapeDelay_malloc(0.8, 0.8);
+#endif
 
   int iterator = 0;
   while (true) {
@@ -100,6 +105,9 @@ int main(int argc, char *argv[]) {
 #if DO_FREEVERB == 1
     FV_Reverb_process(&fv_reverb, buf_fp, block_size);
 #endif
+#if DO_TAPEDELAY == 1
+    TapeDelay_process(tapedelay, buf_fp, block_size);
+#endif
 
     for (int i = 0; i < block_size; i++) {
       buf[i] = q16_16_fp_to_int16(buf_fp[i]);
@@ -118,6 +126,9 @@ int main(int argc, char *argv[]) {
 #endif
 #if DO_BITCRUSH == 1
   Bitcrush_free(bitcrush);
+#endif
+#if DO_TAPEDELAY == 1
+  TapeDelay_free(tapedelay);
 #endif
   return 0;
 }
