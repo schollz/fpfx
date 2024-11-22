@@ -67,7 +67,7 @@ int main(int argc, char *argv[]) {
   FV_Reverb_init(&fv_reverb);
 #endif
 #if DO_TAPEDELAY == 1
-  TapeDelay *tapedelay = TapeDelay_malloc(0.5, 15000);
+  TapeDelay *tapedelay = TapeDelay_malloc(0.89, 15000);
 #endif
 
   int iterator = 0;
@@ -93,23 +93,23 @@ int main(int argc, char *argv[]) {
       TapeDelay_set_delay_time(tapedelay, 7000);
     }
     if (iterator == 80) {
-      TapeDelay_set_feedback(tapedelay, 0.9);
+      TapeDelay_set_feedback(tapedelay, 0.95);
     }
     if (iterator == 90) {
       TapeDelay_set_delay_time(tapedelay, 15000);
     }
     if (iterator == 120) {
-      TapeDelay_set_feedback(tapedelay, 0.995);
+      TapeDelay_set_feedback(tapedelay, 0.5);
     }
     if (iterator == 130) {
       TapeDelay_set_delay_time(tapedelay, 3000);
       TapeDelay_set_feedback(tapedelay, 0.7);
     }
-    if (iterator == 150) {
+    if (iterator == 140) {
       TapeDelay_set_delay_time(tapedelay, 20000);
       TapeDelay_set_feedback(tapedelay, 0.93);
     }
-    if (iterator == 170) {
+    if (iterator == 150) {
       TapeDelay_set_delay_time(tapedelay, 2000);
       TapeDelay_set_feedback(tapedelay, 0.95);
     }
