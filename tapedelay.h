@@ -6,14 +6,17 @@
 #include <stdlib.h>
 
 #include "fixedpoint.h"
+#include "slew.h"
 
 typedef struct TapeDelay {
-  int32_t buffer[44100];  // Fixed circular buffer of 44100 samples
-  size_t buffer_size;     // Size of the circular buffer
-  size_t write_index;     // Current write index
-  float delay_time;       // Delay time in samples (can be fractional)
-  int32_t feedback;       // Feedback amount
+  int32_t buffer[22000];             // Fixed circular buffer of 22000 samples
+  size_t buffer_size;                // Size of the circular buffer
+  size_t write_index;                // Current write index
   unsigned int oversampling_factor;  // Oversampling factor
+  float delay_time;  // Delay time in samples (can be fractional)
+  float feedback;
+  Slew feedback_slew;
+  Slew delay_slew;
 } TapeDelay;
 
 TapeDelay *TapeDelay_malloc(float feedback, float delay_time) {
@@ -22,26 +25,33 @@ TapeDelay *TapeDelay_malloc(float feedback, float delay_time) {
     return NULL;
   }
 
-  tapeDelay->feedback = q16_16_float_to_fp(feedback);
   tapeDelay->delay_time = delay_time;
   tapeDelay->oversampling_factor = 8;  // Hardcoded to 8x oversampling
-  tapeDelay->buffer_size = 44100;      // Fixed buffer size
+  tapeDelay->buffer_size = 22000;      // Fixed buffer size
   tapeDelay->write_index = 0;
+  tapeDelay->feedback = feedback;
 
   // Initialize the buffer to zero
   for (size_t i = 0; i < tapeDelay->buffer_size; i++) {
     tapeDelay->buffer[i] = 0;
   }
 
+  Slew_init(&tapeDelay->feedback_slew, 94230, 0);
+  Slew_set_target(&tapeDelay->feedback_slew, feedback, 94230);
+  Slew_init(&tapeDelay->delay_slew, 94230, 0);
+  Slew_set_target(&tapeDelay->delay_slew, delay_time, 94230);
+
   return tapeDelay;
 }
 
 void TapeDelay_set_feedback(TapeDelay *tapeDelay, float feedback) {
-  tapeDelay->feedback = q16_16_float_to_fp(feedback);
+  tapeDelay->feedback = feedback;
+  Slew_set_target(&tapeDelay->feedback_slew, feedback, 94230);
 }
 
 void TapeDelay_set_delay_time(TapeDelay *tapeDelay, float delay_time) {
   tapeDelay->delay_time = delay_time;
+  Slew_set_target(&tapeDelay->delay_slew, delay_time, 94230);
 }
 
 // Linear interpolation helper
@@ -49,32 +59,58 @@ static inline int32_t linear_interpolation(int32_t y1, int32_t y2, float frac) {
   return y1 + (int32_t)((y2 - y1) * frac);
 }
 
+// Soft clipping function
+static inline int32_t soft_clip(int32_t x, int32_t threshold) {
+  if (x > threshold) {
+    return threshold +
+           ((x - threshold) >> 3);  // Gradual saturation above threshold
+  } else if (x < -threshold) {
+    return -threshold +
+           ((x + threshold) >> 3);  // Gradual saturation below threshold
+  } else {
+    return x;  // No saturation within the threshold
+  }
+}
+
+// Tanh-like saturation function
+static inline int32_t tanh_saturation(int32_t x) {
+  float normalized = x / (float)INT32_MAX;  // Normalize to range -1 to 1
+  float saturated = tanh(normalized);       // Apply tanh for smooth compression
+  return (int32_t)(saturated * INT32_MAX);  // Scale back to int32 range
+}
+
+// Fast tanh-like approximation
+static inline int32_t tanh_approx(int32_t x) {
+  float normalized = x / (float)INT32_MAX;  // Normalize to range -1 to 1
+  float saturated =
+      normalized * (27.0f + normalized * normalized) /
+      (27.0f + 9.0f * normalized * normalized);  // Polynomial approximation
+  return (int32_t)(saturated * INT32_MAX);       // Scale back to int32 range
+}
+
 void TapeDelay_process(TapeDelay *tapeDelay, int32_t *buf,
                        unsigned int nr_samples) {
-  unsigned int oversampling_factor = tapeDelay->oversampling_factor;
-  unsigned int oversampled_samples = nr_samples * oversampling_factor;
+  float previous_delay_time =
+      Slew_process(&tapeDelay->delay_slew);  // Get initial delay time
 
-  // Temporary oversampled buffer
-  int32_t *oversampled_buf =
-      (int32_t *)malloc(oversampled_samples * sizeof(int32_t));
-  if (!oversampled_buf) {
-    return;  // Allocation failed
-  }
-
-  // Oversample the input buffer (simple zero-stuffing)
   for (unsigned int i = 0; i < nr_samples; i++) {
-    oversampled_buf[i * oversampling_factor] = buf[i];
-    for (unsigned int j = 1; j < oversampling_factor; j++) {
-      oversampled_buf[i * oversampling_factor + j] = 0;  // Zero-stuffing
-    }
-  }
+    // Update feedback and delay time dynamically
+    int32_t feedback =
+        q16_16_float_to_fp(Slew_process(&tapeDelay->feedback_slew));
+    float delay_time = Slew_process(&tapeDelay->delay_slew);
 
-  for (unsigned int i = 0; i < oversampled_samples; i++) {
-    // Calculate fractional read index
-    float fractional_read_index = (float)tapeDelay->write_index -
-                                  tapeDelay->delay_time * oversampling_factor;
+    // If delay time changes, introduce abrupt changes to fractional index
+    float fractional_read_index = (float)tapeDelay->write_index - delay_time;
     if (fractional_read_index < 0) {
       fractional_read_index += tapeDelay->buffer_size;
+    }
+
+    // Adjust fractional read index aggressively for pitchy artifacts
+    if (fabs(delay_time - previous_delay_time) >
+        0.01f) {  // Threshold to detect significant change
+      fractional_read_index +=
+          (delay_time - previous_delay_time) * 0.5f;  // Emphasize pitch change
+      previous_delay_time = delay_time;
     }
 
     size_t base_read_index =
@@ -88,9 +124,12 @@ void TapeDelay_process(TapeDelay *tapeDelay, int32_t *buf,
                              tapeDelay->buffer[next_read_index], frac);
 
     // Add feedback to the current sample and write it to the buffer
-    int32_t input_sample = oversampled_buf[i];
+    int32_t input_sample = buf[i];
     int32_t processed_sample =
-        input_sample + q16_16_multiply(tapeDelay->feedback, delayed_sample);
+        input_sample + q16_16_multiply(feedback, delayed_sample);
+
+    // Apply tanh-like saturation to prevent harsh distortion
+    processed_sample = tanh_saturation(processed_sample);
 
     tapeDelay->buffer[tapeDelay->write_index] = processed_sample;
 
@@ -98,16 +137,9 @@ void TapeDelay_process(TapeDelay *tapeDelay, int32_t *buf,
     tapeDelay->write_index =
         (tapeDelay->write_index + 1) % tapeDelay->buffer_size;
 
-    // Store the processed sample back into the oversampled buffer
-    oversampled_buf[i] = processed_sample;
+    // Store the processed sample back in the buffer
+    buf[i] = processed_sample;
   }
-
-  // Downsample back to the original buffer
-  for (unsigned int i = 0; i < nr_samples; i++) {
-    buf[i] = oversampled_buf[i * oversampling_factor];
-  }
-
-  free(oversampled_buf);
 }
 
 void TapeDelay_free(TapeDelay *tapeDelay) {
