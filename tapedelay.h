@@ -9,11 +9,10 @@
 #include "slew.h"
 
 typedef struct TapeDelay {
-  int32_t buffer[22000];             // Fixed circular buffer of 22000 samples
-  size_t buffer_size;                // Size of the circular buffer
-  size_t write_index;                // Current write index
-  unsigned int oversampling_factor;  // Oversampling factor
-  float delay_time;  // Delay time in samples (can be fractional)
+  int32_t buffer[22000];  // Fixed circular buffer of 22000 samples
+  size_t buffer_size;     // Size of the circular buffer
+  size_t write_index;     // Current write index
+  float delay_time;       // Delay time in samples (can be fractional)
   float feedback;
   Slew feedback_slew;
   Slew delay_slew;
@@ -26,8 +25,7 @@ TapeDelay *TapeDelay_malloc(float feedback, float delay_time) {
   }
 
   tapeDelay->delay_time = delay_time;
-  tapeDelay->oversampling_factor = 8;  // Hardcoded to 8x oversampling
-  tapeDelay->buffer_size = 22000;      // Fixed buffer size
+  tapeDelay->buffer_size = 22000;  // Fixed buffer size
   tapeDelay->write_index = 0;
   tapeDelay->feedback = feedback;
 
@@ -129,7 +127,7 @@ void TapeDelay_process(TapeDelay *tapeDelay, int32_t *buf,
         input_sample + q16_16_multiply(feedback, delayed_sample);
 
     // Apply tanh-like saturation to prevent harsh distortion
-    processed_sample = tanh_saturation(processed_sample);
+    processed_sample = tanh_approx(processed_sample);
 
     tapeDelay->buffer[tapeDelay->write_index] = processed_sample;
 

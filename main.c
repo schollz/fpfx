@@ -68,6 +68,8 @@ int main(int argc, char *argv[]) {
 #endif
 #if DO_TAPEDELAY == 1
   TapeDelay *tapedelay = TapeDelay_malloc(0.89, 15000);
+  TapeDelay_set_feedback(tapedelay, 0.9);
+
 #endif
 
   int iterator = 0;
@@ -90,20 +92,20 @@ int main(int argc, char *argv[]) {
     }
 
     if (iterator == 40) {
-      TapeDelay_set_delay_time(tapedelay, 7000);
+      TapeDelay_set_delay_time(tapedelay, 19000);
     }
     if (iterator == 80) {
-      TapeDelay_set_feedback(tapedelay, 0.95);
+      TapeDelay_set_feedback(tapedelay, 0.3);
     }
     if (iterator == 90) {
-      TapeDelay_set_delay_time(tapedelay, 15000);
+      TapeDelay_set_delay_time(tapedelay, 500);
     }
     if (iterator == 120) {
-      TapeDelay_set_feedback(tapedelay, 0.5);
+      TapeDelay_set_feedback(tapedelay, 0.995);
     }
     if (iterator == 130) {
-      TapeDelay_set_delay_time(tapedelay, 3000);
-      TapeDelay_set_feedback(tapedelay, 0.7);
+      TapeDelay_set_delay_time(tapedelay, 12000);
+      TapeDelay_set_feedback(tapedelay, 0.9);
     }
     if (iterator == 140) {
       TapeDelay_set_delay_time(tapedelay, 20000);
